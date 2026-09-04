@@ -1,8 +1,8 @@
 ## Interface: 120100
 ## Title: Augmentation Sonar
-## Notes: Plays a sonar ping when Ebon Might or Prescience is falling off, with tracking UI.
+## Notes: Tracks Ebon Might & Prescience buffs with sonar alerts, themed UI, and combat support.
 ## Author: You
-## Version: 1.1
+## Version: 2.0
 ## SavedVariables: AugSonarDB
 
 core.lua
