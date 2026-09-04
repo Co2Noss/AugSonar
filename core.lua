@@ -506,8 +506,8 @@ settingsFrame:SetScript("OnDragStart", settingsFrame.StartMoving)
 settingsFrame:SetScript("OnDragStop", settingsFrame.StopMovingOrSizing)
 settingsFrame:Hide()
 
--- Settings frame background
-local settingsFrameBg = settingsFrame:CreateTexture(nil, "BACKGROUND")
+-- Settings frame background - use BORDER layer so it shows above template background
+local settingsFrameBg = settingsFrame:CreateTexture(nil, "BORDER")
 settingsFrameBg:SetAllPoints()
 settingsFrame.bg = settingsFrameBg
 
@@ -528,8 +528,21 @@ local function ApplySettingsWindowTheme()
     if settingsFrame.TitleBg then
         settingsFrame.TitleBg:SetColorTexture(unpack(theme.bgColor))
     end
+    if settingsFrame.bg then
+        settingsFrame.bg:SetColorTexture(unpack(theme.windowBgColor))
+    end
+    -- Apply border colors to all inset borders
     if settingsFrame.InsetBorderTop then
         settingsFrame.InsetBorderTop:SetColorTexture(unpack(theme.borderColor))
+    end
+    if settingsFrame.InsetBorderBottom then
+        settingsFrame.InsetBorderBottom:SetColorTexture(unpack(theme.borderColor))
+    end
+    if settingsFrame.InsetBorderLeft then
+        settingsFrame.InsetBorderLeft:SetColorTexture(unpack(theme.borderColor))
+    end
+    if settingsFrame.InsetBorderRight then
+        settingsFrame.InsetBorderRight:SetColorTexture(unpack(theme.borderColor))
     end
 end
 
@@ -582,15 +595,10 @@ local function InitializeThemeDropdown(self, level)
             AugSonarDB.theme = arg1
             DebugPrint("Theme changed to " .. themeData.name)
             ApplyTheme(true)
-            -- Apply theme to entire settings window
-            local theme = THEMES[AugSonarDB.theme] or THEMES.default
-            if settingsFrame.bg then
-                settingsFrame.bg:SetColorTexture(unpack(theme.windowBgColor))
-            end
-            if settingsFrame.TitleBg then
-                settingsFrame.TitleBg:SetColorTexture(unpack(theme.bgColor))
-            end
+            ApplySettingsWindowTheme()
+            -- Force dropdown to update display
             UIDropDownMenu_SetSelectedValue(themeDropdown, arg1)
+            UIDropDownMenu_SetText(themeDropdown, themeData.name)
             CloseDropDownMenus()
         end
         UIDropDownMenu_AddButton(info, level)
@@ -599,6 +607,9 @@ end
 
 UIDropDownMenu_Initialize(themeDropdown, InitializeThemeDropdown)
 UIDropDownMenu_SetSelectedValue(themeDropdown, AugSonarDB.theme or "default")
+-- Set the initial display text to the current theme name
+local currentTheme = THEMES[AugSonarDB.theme] or THEMES.default
+UIDropDownMenu_SetText(themeDropdown, currentTheme.name)
 
 yOffset = yOffset - 35
 
@@ -761,6 +772,7 @@ minimapBtn:SetScript("OnClick", function()
     if settingsFrame:IsShown() then
         settingsFrame:Hide()
     else
+        ApplySettingsWindowTheme()
         settingsFrame:Show()
     end
 end)
@@ -787,11 +799,7 @@ frame:SetScript("OnEvent", function(self, event, arg1)
         threshText:SetText(string.format("%.1f", AugSonarDB.alertThreshold))
         UpdateMinimapPos()
         ApplyTheme(true)
-        -- Apply theme to settings window on load
-        local theme = THEMES[AugSonarDB.theme] or THEMES.default
-        if settingsFrame.bg then
-            settingsFrame.bg:SetColorTexture(unpack(theme.windowBgColor))
-        end
+        ApplySettingsWindowTheme()
         print("|cFF33FF99AugSonar " .. VERSION .. ":|r Loaded. Click minimap icon for settings.")
         
     elseif event == "PLAYER_ENTERING_WORLD" then
