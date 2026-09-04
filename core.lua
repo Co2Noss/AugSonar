@@ -1,5 +1,5 @@
 -- AugSonar Core - Augmentation Evoker Buff Tracker with Combat Support
-local VERSION = "0.14"
+local VERSION = "0.15"
 local EM_SPELL_ID = 395296
 local PRESC_SPELL_ID = 409311
 
@@ -170,7 +170,7 @@ local prescText = prescBar:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
 uiContainer.prescBar, uiContainer.prescBg, uiContainer.prescBorder, uiContainer.prescText = prescBar, prescBg, prescBorder, prescText
 
 local prescienceWindow = CreateFrame("Frame", "AugSonarPrescienceWindow", UIParent, "BackdropTemplate")
-prescienceWindow:SetSize(300, 200)
+prescienceWindow:SetSize(360, 360)
 prescienceWindow:SetPoint("CENTER", 400, 0)
 prescienceWindow:SetMovable(true)
 prescienceWindow:EnableMouse(true)
@@ -181,8 +181,8 @@ prescienceWindow:Hide()
 SetFrameBackdrop(prescienceWindow)
 local pwTitle = prescienceWindow:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
 pwTitle:SetPoint("TOPLEFT", prescienceWindow, "TOPLEFT", 8, -8)
-pwTitle:SetText("Prescience Targets")
-prescienceWindow.maxRows = 8
+pwTitle:SetText("AugSonar Team Tracker")
+prescienceWindow.maxRows = 6
 prescienceWindow.members = {}
 
 local settingsFrame = CreateFrame("Frame", "AugSonarSettingsFrame", UIParent, "BackdropTemplate")
@@ -297,7 +297,7 @@ groupPrescCheckbox:SetPoint("TOPLEFT", settingsFrame, "TOPLEFT", 20, yOffset)
 groupPrescCheckbox:SetChecked(AugSonarDB.showGroupPrescience)
 groupPrescCheckbox.text = groupPrescCheckbox:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 groupPrescCheckbox.text:SetPoint("LEFT", groupPrescCheckbox, "RIGHT", 5, 0)
-groupPrescCheckbox.text:SetText("Show Group Prescience Window")
+groupPrescCheckbox.text:SetText("Show Team Tracker Window")
 groupPrescCheckbox:SetScript("OnClick", function(self) AugSonarDB.showGroupPrescience = self:GetChecked() end)
 yOffset = yOffset - 30
 
@@ -442,8 +442,52 @@ local function GetPlayerBuff(spellID)
     end
 end
 
+local function GetUnitAuraBySpellID(unit, spellID)
+    if unit == "player" then
+        return GetPlayerBuff(spellID)
+    end
+    if AuraUtil and AuraUtil.FindAuraBySpellID then
+        local aura = AuraUtil.FindAuraBySpellID(spellID, unit, "HELPFUL")
+        if aura then return aura end
+    end
+    if C_UnitAuras and C_UnitAuras.GetAuraDataBySpellID then
+        local aura = C_UnitAuras.GetAuraDataBySpellID(unit, spellID)
+        if aura then return aura end
+    end
+end
+
+local function GetSpellIconTexture(spellID)
+    if C_Spell and C_Spell.GetSpellTexture then
+        local tex = C_Spell.GetSpellTexture(spellID)
+        if tex then return tex end
+    end
+    if GetSpellTexture then
+        local tex = GetSpellTexture(spellID)
+        if tex then return tex end
+    end
+    return "Interface\\Icons\\INV_Misc_QuestionMark"
+end
+
+-- WoW does not expose exact distance-in-yards for arbitrary group members
+-- (that API was removed for anti-cheat reasons). UnitInRange is the
+-- combat-safe, Blizzard-sanctioned equivalent real raid frames use, so we
+-- surface an in-range/out-of-range indicator instead of a fabricated number.
+local function IsUnitInRange(unit)
+    if unit == "player" then return true end
+    local inRange, checked = UnitInRange(unit)
+    if checked then return inRange end
+    return true
+end
+
+local function GetUnitClassColor(unit)
+    local _, class = UnitClass(unit)
+    local color = class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[class]
+    if color then return color.r, color.g, color.b end
+    return 1, 1, 1
+end
+
 local function UpdateGroupPrescienceWindow()
-    if not AugSonarDB.showGroupPrescience or not AugSonarDB.showPrescience then
+    if not AugSonarDB.showGroupPrescience then
         prescienceWindow:Hide()
         return
     end
@@ -452,7 +496,7 @@ local function UpdateGroupPrescienceWindow()
         prescienceWindow:Hide()
         return
     end
-    local groupPrescienceData = {}
+    local groupData = {}
     local currentTime = GetTime()
     local isRaid = IsInRaid()
     local groupSize = GetNumGroupMembers()
@@ -460,52 +504,130 @@ local function UpdateGroupPrescienceWindow()
     for i = 1, groupSize do
         local unit = isRaid and ("raid" .. i) or (i == 1 and "player" or ("party" .. (i - 1)))
         if UnitExists(unit) then
-            local aura = nil
-            if AuraUtil and AuraUtil.FindAuraBySpellID then
-                aura = AuraUtil.FindAuraBySpellID(PRESC_SPELL_ID, unit, "HELPFUL")
-            end
-            if not aura and C_UnitAuras and C_UnitAuras.GetAuraDataBySpellID then
-                aura = C_UnitAuras.GetAuraDataBySpellID(unit, PRESC_SPELL_ID)
-            end
-            if aura and aura.expirationTime then
-                table.insert(groupPrescienceData, { name = UnitName(unit), remaining = math.max(0, aura.expirationTime - currentTime), expirationTime = aura.expirationTime })
-            end
+            local emAura = GetUnitAuraBySpellID(unit, EM_SPELL_ID)
+            local prescAura = AugSonarDB.showPrescience and GetUnitAuraBySpellID(unit, PRESC_SPELL_ID) or nil
+            local emRemaining = emAura and emAura.expirationTime and math.max(0, emAura.expirationTime - currentTime) or nil
+            local prescRemaining = prescAura and prescAura.expirationTime and math.max(0, prescAura.expirationTime - currentTime) or nil
+            local hpMax = UnitHealthMax(unit)
+            local hpPct = hpMax and hpMax > 0 and (UnitHealth(unit) / hpMax * 100) or 100
+            table.insert(groupData, {
+                unit = unit,
+                name = UnitName(unit) or unit,
+                emRemaining = emRemaining,
+                emDuration = emAura and emAura.duration and emAura.duration > 0 and emAura.duration or 10,
+                prescRemaining = prescRemaining,
+                prescDuration = prescAura and prescAura.duration and prescAura.duration > 0 and prescAura.duration or 15,
+                hpPct = hpPct,
+                inRange = IsUnitInRange(unit),
+                score = math.min(emRemaining or -1, prescRemaining or -1),
+            })
         end
     end
-    table.sort(groupPrescienceData, function(a, b) return a.remaining > b.remaining end)
-    if #groupPrescienceData == 0 then
+    table.sort(groupData, function(a, b) return a.score < b.score end)
+    if #groupData == 0 then
         prescienceWindow:Hide()
         return
     end
     prescienceWindow:Show()
-    for i = 1, math.min(#groupPrescienceData, prescienceWindow.maxRows) do
-        local data = groupPrescienceData[i]
+    local palette = CurrentPalette()
+    for i = 1, math.min(#groupData, prescienceWindow.maxRows) do
+        local data = groupData[i]
         local row = prescienceWindow.members[i]
         if not row then
             row = CreateFrame("Frame", nil, prescienceWindow)
-            row:SetSize(280, 20)
-            row:SetPoint("TOPLEFT", prescienceWindow, "TOPLEFT", 8, -30 - ((i - 1) * 22))
+            row:SetSize(336, 50)
+            row:SetPoint("TOPLEFT", prescienceWindow, "TOPLEFT", 8, -30 - ((i - 1) * 54))
             SetFrameBackdrop(row)
             row.bg = row:CreateTexture(nil, "BACKGROUND"); row.bg:SetAllPoints()
             row.border = row:CreateTexture(nil, "BORDER"); row.border:SetAllPoints(); row.border:SetTexture("Interface\\Buttons\\WHITE8X8")
-            row.bar = CreateFrame("StatusBar", nil, row)
-            row.bar:SetSize(140, 18)
-            row.bar:SetPoint("RIGHT", row, "RIGHT", -8, 0)
-            row.bar:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
+
+            row.emIcon = row:CreateTexture(nil, "ARTWORK")
+            row.emIcon:SetSize(16, 16)
+            row.emIcon:SetPoint("TOPLEFT", row, "TOPLEFT", 4, -4)
+            row.emIcon:SetTexture(GetSpellIconTexture(EM_SPELL_ID))
+
+            row.prescIcon = row:CreateTexture(nil, "ARTWORK")
+            row.prescIcon:SetSize(16, 16)
+            row.prescIcon:SetPoint("LEFT", row.emIcon, "RIGHT", 2, 0)
+            row.prescIcon:SetTexture(GetSpellIconTexture(PRESC_SPELL_ID))
+
             row.nameText = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-            row.nameText:SetPoint("LEFT", row, "LEFT", 4, 0)
-            row.nameText:SetWidth(130)
+            row.nameText:SetPoint("LEFT", row.prescIcon, "RIGHT", 6, 0)
+            row.nameText:SetWidth(140)
+            row.nameText:SetJustifyH("LEFT")
+
+            row.hpText = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            row.hpText:SetPoint("TOPRIGHT", row, "TOPRIGHT", -60, -4)
+            row.hpText:SetWidth(50)
+            row.hpText:SetJustifyH("RIGHT")
+
+            row.rangeText = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            row.rangeText:SetPoint("TOPRIGHT", row, "TOPRIGHT", -4, -4)
+            row.rangeText:SetWidth(56)
+            row.rangeText:SetJustifyH("RIGHT")
+
+            row.emBar = CreateFrame("StatusBar", nil, row)
+            row.emBar:SetSize(328, 12)
+            row.emBar:SetPoint("TOPLEFT", row, "TOPLEFT", 4, -22)
+            row.emBar:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
+            row.emBarText = row.emBar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            row.emBarText:SetPoint("CENTER")
+
+            row.prescBar = CreateFrame("StatusBar", nil, row)
+            row.prescBar:SetSize(328, 12)
+            row.prescBar:SetPoint("TOPLEFT", row, "TOPLEFT", 4, -36)
+            row.prescBar:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
+            row.prescBarText = row.prescBar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            row.prescBarText:SetPoint("CENTER")
+
             prescienceWindow.members[i] = row
         end
         row:Show()
         row.nameText:SetText(data.name)
-        row.bar:SetMinMaxValues(0, 15)
-        row.bar:SetValue(data.remaining)
-        row.bar:SetStatusBarColor(unpack(CurrentPalette().prescColor))
-        row.bg:SetColorTexture(unpack(CurrentPalette().bg))
-        row.border:SetColorTexture(unpack(CurrentPalette().border))
+        row.nameText:SetTextColor(GetUnitClassColor(data.unit))
+        row.hpText:SetText(string.format("%.0f%%", data.hpPct))
+        if data.hpPct <= 35 then
+            row.hpText:SetTextColor(1, 0.2, 0.2)
+        else
+            row.hpText:SetTextColor(1, 1, 1)
+        end
+        if data.inRange then
+            row.rangeText:SetText("In Range")
+            row.rangeText:SetTextColor(0.3, 1, 0.3)
+        else
+            row.rangeText:SetText("Out of Range")
+            row.rangeText:SetTextColor(1, 0.3, 0.3)
+        end
+
+        row.emBar:SetMinMaxValues(0, data.emDuration)
+        if data.emRemaining then
+            row.emBar:SetValue(data.emRemaining)
+            row.emBar:SetStatusBarColor(unpack(palette.emColor))
+            row.emBarText:SetText(string.format("Ebon Might: %.1fs", data.emRemaining))
+        else
+            row.emBar:SetValue(0)
+            row.emBar:SetStatusBarColor(0.6, 0.1, 0.1)
+            row.emBarText:SetText("Ebon Might: Missing")
+        end
+
+        row.prescBar:SetShown(AugSonarDB.showPrescience)
+        if AugSonarDB.showPrescience then
+            row.prescBar:SetMinMaxValues(0, data.prescDuration)
+            if data.prescRemaining then
+                row.prescBar:SetValue(data.prescRemaining)
+                row.prescBar:SetStatusBarColor(unpack(palette.prescColor))
+                row.prescBarText:SetText(string.format("Prescience: %.1fs", data.prescRemaining))
+            else
+                row.prescBar:SetValue(0)
+                row.prescBar:SetStatusBarColor(0.6, 0.1, 0.1)
+                row.prescBarText:SetText("Prescience: Missing")
+            end
+        end
+
+        row.bg:SetColorTexture(unpack(palette.bg))
+        row.border:SetColorTexture(unpack(palette.border))
     end
-    for i = #groupPrescienceData + 1, #prescienceWindow.members do
+    for i = #groupData + 1, #prescienceWindow.members do
         if prescienceWindow.members[i] then prescienceWindow.members[i]:Hide() end
     end
 end
