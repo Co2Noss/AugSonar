@@ -254,7 +254,7 @@ settingsFrame:SetScript("OnDragStop", settingsFrame.StopMovingOrSizing)
 settingsFrame:Hide()
 
 settingsFrame.title = settingsFrame:CreateFontString(nil, "OVERLAY")
-settingsFrame.title:SetFontObject("GameFontBold")
+settingsFrame.title:SetFontObject("GameFontHighlight")
 settingsFrame.title:SetPoint("CENTER", settingsFrame.TitleBg, "CENTER", 0, 0)
 settingsFrame.title:SetText("AugSonar Settings")
 
