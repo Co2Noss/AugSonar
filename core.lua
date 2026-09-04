@@ -1,5 +1,5 @@
 -- AugSonar Core - Augmentation Evoker Buff Tracker with Combat Support
-local VERSION = "0.11"
+local VERSION = "0.12"
 local EM_SPELL_ID = 395296
 local PRESC_SPELL_ID = 409311
 
@@ -100,21 +100,6 @@ local function SetChromeColor(frame, color)
         frame:SetBackdropColor(unpack(color))
     elseif frame.bg then
         frame.bg:SetColorTexture(unpack(color))
-    end
-
-    local function SkinButton(button, palette)
-        if not button then return end
-        if not button._bg then
-            button._bg = button:CreateTexture(nil, "BACKGROUND")
-            button._bg:SetAllPoints()
-        end
-        if not button._border then
-            button._border = button:CreateTexture(nil, "BORDER")
-            button._border:SetAllPoints()
-            button._border:SetTexture("Interface\\Buttons\\WHITE8X8")
-        end
-        button._bg:SetColorTexture(unpack(palette.panel))
-        button._border:SetColorTexture(unpack(palette.border))
     end
     ApplyBorder(frame, color)
 end
@@ -249,10 +234,12 @@ local function ApplyTheme()
     if settingsFrame then
         SetChromeColor(settingsFrame, palette.border)
         if settingsFrame.bg then settingsFrame.bg:SetColorTexture(unpack(palette.panel)) end
+        if settingsFrame.border then settingsFrame.border:SetColorTexture(unpack(palette.border)) end
         if settingsFrame.title then settingsFrame.title:SetTextColor(unpack(palette.accent)) end
         if versionText then versionText:SetTextColor(unpack(palette.accent)) end
         SkinButton(testButton, palette)
         SkinButton(closeButton, palette)
+        SkinButton(debugButton, palette)
     end
 end
 
