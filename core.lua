@@ -1,5 +1,5 @@
 -- AugSonar Core - Augmentation Evoker Buff Tracker with Combat Support
-local VERSION = "0.10"
+local VERSION = "0.11"
 local EM_SPELL_ID = 395296
 local PRESC_SPELL_ID = 409311
 
@@ -77,6 +77,21 @@ local function SetBackdropColors(frame, bgColor, borderColor)
         if frame.bg then frame.bg:SetColorTexture(unpack(bgColor)) end
         ApplyBorder(frame, borderColor)
     end
+end
+
+local function SkinButton(button, palette)
+    if not button then return end
+    if not button._bg then
+        button._bg = button:CreateTexture(nil, "BACKGROUND")
+        button._bg:SetAllPoints()
+    end
+    if not button._border then
+        button._border = button:CreateTexture(nil, "BORDER")
+        button._border:SetAllPoints()
+        button._border:SetTexture("Interface\\Buttons\\WHITE8X8")
+    end
+    button._bg:SetColorTexture(unpack(palette.panel))
+    button._border:SetColorTexture(unpack(palette.border))
 end
 
 local function SetChromeColor(frame, color)
