@@ -1,5 +1,5 @@
 -- AugSonar Core - Augmentation Evoker Buff Tracker with Combat Support
-local VERSION = "0.06"
+local VERSION = "0.07"
 local EM_SPELL_ID = 395296
 local PRESC_SPELL_ID = 409311
 
@@ -39,6 +39,23 @@ frame:RegisterEvent("GROUP_ROSTER_UPDATE")
 local function DebugPrint(message)
     if AugSonarDB.debugMode then
         print("|cFF33FF99AugSonar [DEBUG]:|r " .. message)
+    end
+end
+
+local function SetFrameBackdrop(frame)
+    if not frame then return end
+    if frame.SetBackdrop then
+        frame:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
+        return
+    end
+    if not frame.bg then
+        frame.bg = frame:CreateTexture(nil, "BACKGROUND")
+        frame.bg:SetAllPoints()
+    end
+    if not frame.border then
+        frame.border = frame:CreateTexture(nil, "BORDER")
+        frame.border:SetAllPoints()
+        frame.border:SetTexture("Interface\\Buttons\\WHITE8X8")
     end
 end
 
@@ -95,7 +112,7 @@ prescienceWindow:RegisterForDrag("LeftButton")
 prescienceWindow:SetScript("OnDragStart", function(self) if not AugSonarDB.locked then self:StartMoving() end end)
 prescienceWindow:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
 prescienceWindow:Hide()
-prescienceWindow:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
+SetFrameBackdrop(prescienceWindow)
 local pwTitle = prescienceWindow:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
 pwTitle:SetPoint("TOPLEFT", prescienceWindow, "TOPLEFT", 8, -8)
 pwTitle:SetText("Prescience Targets")
@@ -111,7 +128,7 @@ settingsFrame:RegisterForDrag("LeftButton")
 settingsFrame:SetScript("OnDragStart", settingsFrame.StartMoving)
 settingsFrame:SetScript("OnDragStop", settingsFrame.StopMovingOrSizing)
 settingsFrame:Hide()
-settingsFrame:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
+SetFrameBackdrop(settingsFrame)
 settingsFrame.bg = settingsFrame:CreateTexture(nil, "BACKGROUND")
 settingsFrame.bg:SetAllPoints()
 settingsFrame.title = settingsFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
@@ -140,14 +157,24 @@ local function ApplyTheme()
         uiContainer.prescBorder:SetColorTexture(unpack(palette.border))
     end
     if prescienceWindow then
-        prescienceWindow:SetBackdropColor(unpack(palette.panel))
-        prescienceWindow:SetBackdropBorderColor(unpack(palette.border))
+        if prescienceWindow.SetBackdropColor then
+            prescienceWindow:SetBackdropColor(unpack(palette.panel))
+            prescienceWindow:SetBackdropBorderColor(unpack(palette.border))
+        elseif prescienceWindow.bg and prescienceWindow.border then
+            prescienceWindow.bg:SetColorTexture(unpack(palette.panel))
+            prescienceWindow.border:SetColorTexture(unpack(palette.border))
+        end
         if prescienceWindow.bg then prescienceWindow.bg:SetColorTexture(unpack(palette.panel)) end
         if prescienceWindow.border then prescienceWindow.border:SetColorTexture(unpack(palette.border)) end
     end
     if settingsFrame then
-        settingsFrame:SetBackdropColor(unpack(palette.bg))
-        settingsFrame:SetBackdropBorderColor(unpack(palette.border))
+        if settingsFrame.SetBackdropColor then
+            settingsFrame:SetBackdropColor(unpack(palette.bg))
+            settingsFrame:SetBackdropBorderColor(unpack(palette.border))
+        elseif settingsFrame.bg and settingsFrame.border then
+            settingsFrame.bg:SetColorTexture(unpack(palette.bg))
+            settingsFrame.border:SetColorTexture(unpack(palette.border))
+        end
         if settingsFrame.bg then settingsFrame.bg:SetColorTexture(unpack(palette.bg)) end
         if settingsFrame.title then settingsFrame.title:SetTextColor(unpack(palette.accent)) end
         if versionText then versionText:SetTextColor(unpack(palette.accent)) end
