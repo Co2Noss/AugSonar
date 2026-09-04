@@ -1,4 +1,5 @@
 -- AugSonar Core - Augmentation Evoker Buff Tracker with Combat Support
+local VERSION = "2.01"
 local EM_SPELL_ID = 395296    -- Ebon Might
 local PRESC_SPELL_ID = 409311 -- Prescience
 
@@ -458,6 +459,12 @@ settingsFrame.title:SetFontObject("GameFontHighlight")
 settingsFrame.title:SetPoint("CENTER", settingsFrame.TitleBg, "CENTER", 0, 0)
 settingsFrame.title:SetText("AugSonar Settings")
 
+-- Version Display
+local versionText = settingsFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+versionText:SetPoint("TOPRIGHT", settingsFrame, "TOPRIGHT", -15, -10)
+versionText:SetTextColor(0.7, 0.7, 0.7)
+versionText:SetText("v" .. VERSION)
+
 local yOffset = -40
 
 -- Alert Threshold
@@ -684,7 +691,7 @@ frame:SetScript("OnEvent", function(self, event, arg1)
         threshText:SetText(string.format("%.1f", AugSonarDB.alertThreshold))
         UpdateMinimapPos()
         ApplyTheme(true)
-        print("|cFF33FF99AugSonar 2.0:|r Loaded. Click minimap icon for settings.")
+        print("|cFF33FF99AugSonar " .. VERSION .. ":|r Loaded. Click minimap icon for settings.")
         
     elseif event == "PLAYER_ENTERING_WORLD" then
         if not ticker then
