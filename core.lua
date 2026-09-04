@@ -1,5 +1,5 @@
 -- AugSonar Core - Augmentation Evoker Buff Tracker with Combat Support
-local VERSION = "0.09"
+local VERSION = "0.10"
 local EM_SPELL_ID = 395296
 local PRESC_SPELL_ID = 409311
 
@@ -76,6 +76,58 @@ local function SetBackdropColors(frame, bgColor, borderColor)
     else
         if frame.bg then frame.bg:SetColorTexture(unpack(bgColor)) end
         ApplyBorder(frame, borderColor)
+    end
+end
+
+local function SetChromeColor(frame, color)
+    if not frame then return end
+    if frame.SetBackdropColor then
+        frame:SetBackdropColor(unpack(color))
+    elseif frame.bg then
+        frame.bg:SetColorTexture(unpack(color))
+    end
+
+    local function SkinButton(button, palette)
+        if not button then return end
+        if not button._bg then
+            button._bg = button:CreateTexture(nil, "BACKGROUND")
+            button._bg:SetAllPoints()
+        end
+        if not button._border then
+            button._border = button:CreateTexture(nil, "BORDER")
+            button._border:SetAllPoints()
+            button._border:SetTexture("Interface\\Buttons\\WHITE8X8")
+        end
+        button._bg:SetColorTexture(unpack(palette.panel))
+        button._border:SetColorTexture(unpack(palette.border))
+    end
+    ApplyBorder(frame, color)
+end
+
+local function ToggleDebugAddonMode()
+    AugSonarDB.debugMode = not AugSonarDB.debugMode
+    if AugSonarDB.debugMode then
+        AugSonarDB.disabledAddons = {}
+        if C_AddOns and C_AddOns.GetAddOns then
+            local addons = C_AddOns.GetAddOns()
+            if addons then
+                for _, addon in ipairs(addons) do
+                    if addon ~= ADDON_NAME and C_AddOns.IsAddOnLoaded(addon) then
+                        table.insert(AugSonarDB.disabledAddons, addon)
+                        if C_AddOns.DisableAddOn then
+                            C_AddOns.DisableAddOn(addon)
+                        end
+                    end
+                end
+            end
+        end
+    else
+        if type(AugSonarDB.disabledAddons) == "table" and C_AddOns and C_AddOns.EnableAddOn then
+            for _, addon in ipairs(AugSonarDB.disabledAddons) do
+                C_AddOns.EnableAddOn(addon)
+            end
+        end
+        AugSonarDB.disabledAddons = nil
     end
 end
 
@@ -177,12 +229,15 @@ local function ApplyTheme()
         uiContainer.prescBorder:SetColorTexture(unpack(palette.border))
     end
     if prescienceWindow then
-        SetBackdropColors(prescienceWindow, palette.panel, palette.border)
+        SetChromeColor(prescienceWindow, palette.border)
     end
     if settingsFrame then
-        SetBackdropColors(settingsFrame, palette.bg, palette.border)
+        SetChromeColor(settingsFrame, palette.border)
+        if settingsFrame.bg then settingsFrame.bg:SetColorTexture(unpack(palette.panel)) end
         if settingsFrame.title then settingsFrame.title:SetTextColor(unpack(palette.accent)) end
         if versionText then versionText:SetTextColor(unpack(palette.accent)) end
+        SkinButton(testButton, palette)
+        SkinButton(closeButton, palette)
     end
 end
 
@@ -272,13 +327,15 @@ lockCheckbox.text:SetText("Lock UI Position")
 lockCheckbox:SetScript("OnClick", function(self) AugSonarDB.locked = self:GetChecked() end)
 yOffset = yOffset - 30
 
-local debugCheckbox = CreateFrame("CheckButton", nil, settingsFrame, "UICheckButtonTemplate")
-debugCheckbox:SetPoint("TOPLEFT", settingsFrame, "TOPLEFT", 20, yOffset)
-debugCheckbox:SetChecked(AugSonarDB.debugMode)
-debugCheckbox.text = debugCheckbox:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-debugCheckbox.text:SetPoint("LEFT", debugCheckbox, "RIGHT", 5, 0)
-debugCheckbox.text:SetText("Debug Mode (Chat Output)")
-debugCheckbox:SetScript("OnClick", function(self) AugSonarDB.debugMode = self:GetChecked() end)
+yOffset = yOffset - 5
+local debugButton = CreateFrame("Button", nil, settingsFrame, "UIPanelButtonTemplate")
+debugButton:SetSize(180, 28)
+debugButton:SetPoint("TOPLEFT", settingsFrame, "TOPLEFT", 20, yOffset)
+debugButton:SetText("Debug Mode: Off")
+debugButton:SetScript("OnClick", function(self)
+    ToggleDebugAddonMode()
+    self:SetText(AugSonarDB.debugMode and "Debug Mode: On" or "Debug Mode: Off")
+end)
 yOffset = yOffset - 45
 
 local testButton = CreateFrame("Button", nil, settingsFrame, "UIPanelButtonTemplate")
@@ -288,7 +345,6 @@ testButton:SetText("Test Alert & UI")
 testButton:SetScript("OnClick", function()
     local palette = CurrentPalette()
     ApplyTheme()
-    settingsFrame:Show()
     emBar:Show()
     prescBar:Show()
     emBar:SetMinMaxValues(0, 10)
@@ -299,6 +355,10 @@ testButton:SetScript("OnClick", function()
     prescText:SetText("Prescience: 4.0s")
     emBar:SetStatusBarColor(unpack(palette.emColor))
     prescBar:SetStatusBarColor(unpack(palette.prescColor))
+    C_Timer.After(2, function()
+        emBar:Hide()
+        prescBar:Hide()
+    end)
     PlaySonarSound()
 end)
 
@@ -429,7 +489,7 @@ local function UpdateGroupPrescienceWindow()
             row = CreateFrame("Frame", nil, prescienceWindow)
             row:SetSize(280, 20)
             row:SetPoint("TOPLEFT", prescienceWindow, "TOPLEFT", 8, -30 - ((i - 1) * 22))
-            row:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
+            SetFrameBackdrop(row)
             row.bg = row:CreateTexture(nil, "BACKGROUND"); row.bg:SetAllPoints()
             row.border = row:CreateTexture(nil, "BORDER"); row.border:SetAllPoints(); row.border:SetTexture("Interface\\Buttons\\WHITE8X8")
             row.bar = CreateFrame("StatusBar", nil, row)
@@ -446,7 +506,7 @@ local function UpdateGroupPrescienceWindow()
         row.bar:SetMinMaxValues(0, 15)
         row.bar:SetValue(data.remaining)
         row.bar:SetStatusBarColor(unpack(CurrentPalette().prescColor))
-        row.bg:SetColorTexture(unpack(CurrentPalette().panel))
+        row.bg:SetColorTexture(unpack(CurrentPalette().bg))
         row.border:SetColorTexture(unpack(CurrentPalette().border))
     end
     for i = #groupPrescienceData + 1, #prescienceWindow.members do
