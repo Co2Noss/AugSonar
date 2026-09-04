@@ -2,7 +2,7 @@
 ## Title: Augmentation Sonar
 ## Notes: Tracks Ebon Might & Prescience buffs with sonar alerts, themed UI, and combat support.
 ## Author: You
-## Version: 2.03
+## Version: 0.01
 ## SavedVariables: AugSonarDB
 
 core.lua

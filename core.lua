@@ -1,5 +1,5 @@
 -- AugSonar Core - Augmentation Evoker Buff Tracker with Combat Support
-local VERSION = "2.03"
+local VERSION = "0.01"
 local EM_SPELL_ID = 395296    -- Ebon Might
 local PRESC_SPELL_ID = 409311 -- Prescience
 
@@ -197,9 +197,6 @@ local function ApplyTheme(immediately)
             end
         end
     end
-    
-    -- Settings window theme
-    ApplySettingsWindowTheme()
 end
 
 -- ==========================================
@@ -544,6 +541,11 @@ local function InitializeThemeDropdown(self, level)
             AugSonarDB.theme = arg1
             DebugPrint("Theme changed to " .. themeData.name)
             ApplyTheme(true)
+            -- Apply theme to settings window
+            local theme = THEMES[AugSonarDB.theme] or THEMES.default
+            if settingsFrame.TitleBg then
+                settingsFrame.TitleBg:SetColorTexture(unpack(theme.bgColor))
+            end
             UIDropDownMenu_SetSelectedValue(themeDropdown, arg1)
             CloseDropDownMenus()
         end
