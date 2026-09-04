@@ -1,5 +1,5 @@
 -- AugSonar Core - Augmentation Evoker Buff Tracker with Combat Support
-local VERSION = "2.01"
+local VERSION = "2.02"
 local EM_SPELL_ID = 395296    -- Ebon Might
 local PRESC_SPELL_ID = 409311 -- Prescience
 
@@ -68,16 +68,18 @@ frame:RegisterEvent("GROUP_ROSTER_UPDATE")
 local function PlaySonarSound()
     if not AugSonarDB.soundEnabled then return end
     
-    -- Try multiple sound methods for compatibility
-    local soundPath = "Interface\\AddOns\\AugSonar\\sonar.ogg"
+    -- Try with forward slashes (WoW standard)
+    local soundPath1 = "Interface/AddOns/AugSonar/sonar.ogg"
+    local soundPath2 = "Interface\\AddOns\\AugSonar\\sonar.ogg"
     
     if PlaySoundFile then
-        PlaySoundFile(soundPath, "Master")
-    end
-    
-    -- Fallback: Try built-in game sounds
-    if not PlaySoundFile then
-        PlaySound(8596) -- Raid warning sound as fallback
+        local success = PlaySoundFile(soundPath1, "Master")
+        if not success then
+            PlaySoundFile(soundPath2, "Master")
+        end
+    else
+        -- Fallback: Use a built-in game sound
+        PlaySound(8596)
     end
 end
 
@@ -460,9 +462,9 @@ settingsFrame.title:SetPoint("CENTER", settingsFrame.TitleBg, "CENTER", 0, 0)
 settingsFrame.title:SetText("AugSonar Settings")
 
 -- Version Display
-local versionText = settingsFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+local versionText = settingsFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
 versionText:SetPoint("TOPRIGHT", settingsFrame, "TOPRIGHT", -15, -10)
-versionText:SetTextColor(0.7, 0.7, 0.7)
+versionText:SetTextColor(1, 0.84, 0)
 versionText:SetText("v" .. VERSION)
 
 local yOffset = -40
@@ -502,23 +504,27 @@ yOffset = yOffset - 25
 
 local themeDropdown = CreateFrame("Frame", "AugSonarThemeDropdown", settingsFrame, "UIDropDownMenuTemplate")
 themeDropdown:SetPoint("TOPLEFT", settingsFrame, "TOPLEFT", 10, yOffset)
+UIDropDownMenu_SetWidth(themeDropdown, 150)
 
-UIDropDownMenu_Initialize(themeDropdown, function(self, level)
+local function InitializeThemeDropdown(self, level)
     for themeKey, themeData in pairs(THEMES) do
         local info = UIDropDownMenu_CreateInfo()
         info.text = themeData.name
         info.arg1 = themeKey
+        info.checked = (AugSonarDB.theme == themeKey)
         info.func = function(self, arg1)
             AugSonarDB.theme = arg1
-            UIDropDownMenu_SetSelectedValue(themeDropdown, arg1)
+            print("|cFF33FF99AugSonar:|r Theme changed to " .. themeData.name)
             ApplyTheme(true)
+            UIDropDownMenu_SetSelectedValue(themeDropdown, arg1)
+            CloseDropDownMenus()
         end
         UIDropDownMenu_AddButton(info, level)
     end
-end)
+end
 
-UIDropDownMenu_SetSelectedValue(themeDropdown, AugSonarDB.theme)
-UIDropDownMenu_SetWidth(themeDropdown, 150)
+UIDropDownMenu_Initialize(themeDropdown, InitializeThemeDropdown)
+UIDropDownMenu_SetSelectedValue(themeDropdown, AugSonarDB.theme or "default")
 
 yOffset = yOffset - 35
 
