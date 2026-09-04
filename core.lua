@@ -1,5 +1,5 @@
 -- AugSonar Core - Augmentation Evoker Buff Tracker with Combat Support
-local VERSION = "0.01"
+local VERSION = "0.02"
 local EM_SPELL_ID = 395296    -- Ebon Might
 local PRESC_SPELL_ID = 409311 -- Prescience
 
@@ -28,6 +28,7 @@ local THEMES = {
         prescColor = { 0.4, 0.8, 0.9 },
         bgColor = { 0, 0, 0, 0.6 },
         borderColor = { 1, 1, 1, 0.3 },
+        windowBgColor = { 0.05, 0.05, 0.05, 0.8 },
     },
     dark = {
         name = "Dark",
@@ -35,6 +36,7 @@ local THEMES = {
         prescColor = { 0.2, 0.8, 1 },
         bgColor = { 0.05, 0.05, 0.05, 0.9 },
         borderColor = { 0.5, 0.5, 0.5, 0.7 },
+        windowBgColor = { 0.02, 0.02, 0.02, 0.9 },
     },
     light = {
         name = "Light",
@@ -42,6 +44,7 @@ local THEMES = {
         prescColor = { 0.2, 0.7, 1 },
         bgColor = { 0.9, 0.9, 0.9, 0.5 },
         borderColor = { 0.2, 0.2, 0.2, 0.7 },
+        windowBgColor = { 0.85, 0.85, 0.85, 0.7 },
     },
     purple = {
         name = "Purple Mage",
@@ -49,6 +52,39 @@ local THEMES = {
         prescColor = { 0.6, 0.2, 0.9 },
         bgColor = { 0.1, 0.05, 0.15, 0.8 },
         borderColor = { 0.8, 0.4, 1, 0.8 },
+        windowBgColor = { 0.08, 0.03, 0.12, 0.85 },
+    },
+    elvui = {
+        name = "ElvUI (Crimson)",
+        emColor = { 0.9, 0.1, 0.1 },
+        prescColor = { 0.3, 0.7, 0.9 },
+        bgColor = { 0.12, 0.05, 0.05, 0.85 },
+        borderColor = { 0.6, 0.1, 0.1, 0.8 },
+        windowBgColor = { 0.1, 0.04, 0.04, 0.9 },
+    },
+    ellsemereui = {
+        name = "EllesemereUI (Teal)",
+        emColor = { 0.2, 0.8, 0.8 },
+        prescColor = { 0.3, 0.9, 0.7 },
+        bgColor = { 0.05, 0.15, 0.15, 0.85 },
+        borderColor = { 0.2, 0.7, 0.7, 0.8 },
+        windowBgColor = { 0.04, 0.12, 0.12, 0.9 },
+    },
+    gw2ui = {
+        name = "GW2 UI (Gold/Brown)",
+        emColor = { 1, 0.82, 0.2 },
+        prescColor = { 0.5, 0.8, 0.3 },
+        bgColor = { 0.15, 0.1, 0.05, 0.85 },
+        borderColor = { 0.8, 0.6, 0.2, 0.8 },
+        windowBgColor = { 0.12, 0.08, 0.04, 0.9 },
+    },
+    realui = {
+        name = "RealUI (Blue/Cyan)",
+        emColor = { 0.3, 0.8, 1 },
+        prescColor = { 0.2, 0.9, 0.8 },
+        bgColor = { 0.05, 0.12, 0.18, 0.85 },
+        borderColor = { 0.2, 0.6, 0.9, 0.8 },
+        windowBgColor = { 0.04, 0.08, 0.14, 0.9 },
     },
 }
 
@@ -470,6 +506,11 @@ settingsFrame:SetScript("OnDragStart", settingsFrame.StartMoving)
 settingsFrame:SetScript("OnDragStop", settingsFrame.StopMovingOrSizing)
 settingsFrame:Hide()
 
+-- Settings frame background
+local settingsFrameBg = settingsFrame:CreateTexture(nil, "BACKGROUND")
+settingsFrameBg:SetAllPoints()
+settingsFrame.bg = settingsFrameBg
+
 settingsFrame.title = settingsFrame:CreateFontString(nil, "OVERLAY")
 settingsFrame.title:SetFontObject("GameFontHighlight")
 settingsFrame.title:SetPoint("CENTER", settingsFrame.TitleBg, "CENTER", 0, 0)
@@ -541,8 +582,11 @@ local function InitializeThemeDropdown(self, level)
             AugSonarDB.theme = arg1
             DebugPrint("Theme changed to " .. themeData.name)
             ApplyTheme(true)
-            -- Apply theme to settings window
+            -- Apply theme to entire settings window
             local theme = THEMES[AugSonarDB.theme] or THEMES.default
+            if settingsFrame.bg then
+                settingsFrame.bg:SetColorTexture(unpack(theme.windowBgColor))
+            end
             if settingsFrame.TitleBg then
                 settingsFrame.TitleBg:SetColorTexture(unpack(theme.bgColor))
             end
@@ -743,6 +787,11 @@ frame:SetScript("OnEvent", function(self, event, arg1)
         threshText:SetText(string.format("%.1f", AugSonarDB.alertThreshold))
         UpdateMinimapPos()
         ApplyTheme(true)
+        -- Apply theme to settings window on load
+        local theme = THEMES[AugSonarDB.theme] or THEMES.default
+        if settingsFrame.bg then
+            settingsFrame.bg:SetColorTexture(unpack(theme.windowBgColor))
+        end
         print("|cFF33FF99AugSonar " .. VERSION .. ":|r Loaded. Click minimap icon for settings.")
         
     elseif event == "PLAYER_ENTERING_WORLD" then
