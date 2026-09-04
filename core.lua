@@ -1,5 +1,5 @@
 -- AugSonar Core - Augmentation Evoker Buff Tracker with Combat Support
-local VERSION = "0.13"
+local VERSION = "0.14"
 local EM_SPELL_ID = 395296
 local PRESC_SPELL_ID = 409311
 
@@ -45,7 +45,12 @@ end
 local function SetFrameBackdrop(frame)
     if not frame then return end
     if frame.SetBackdrop then
-        frame:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
+        frame:SetBackdrop({
+            bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+            tile = true, tileSize = 16, edgeSize = 16,
+            insets = { left = 4, right = 4, top = 4, bottom = 4 },
+        })
         return
     end
     if not frame.bg then
@@ -94,67 +99,26 @@ local function SkinButton(button, palette)
     button._border:SetColorTexture(unpack(palette.border))
 end
 
-local function SetChromeColor(frame, color)
-    if not frame then return end
-    if frame.SetBackdropColor then
-        frame:SetBackdropColor(unpack(color))
-    elseif frame.bg then
-        frame.bg:SetColorTexture(unpack(color))
-    end
-    ApplyBorder(frame, color)
-end
-
-local function EnsureFrameChrome(frame)
-    if not frame then return end
-    if not frame.chromeTop then
-        frame.chromeTop = frame:CreateTexture(nil, "ARTWORK")
-        frame.chromeTop:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
-        frame.chromeTop:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, 0)
-        frame.chromeTop:SetHeight(16)
-    end
-    if not frame.chromeBottom then
-        frame.chromeBottom = frame:CreateTexture(nil, "ARTWORK")
-        frame.chromeBottom:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, 0)
-        frame.chromeBottom:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
-        frame.chromeBottom:SetHeight(16)
-    end
-    if not frame.chromeLeft then
-        frame.chromeLeft = frame:CreateTexture(nil, "ARTWORK")
-        frame.chromeLeft:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
-        frame.chromeLeft:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, 0)
-        frame.chromeLeft:SetWidth(16)
-    end
-    if not frame.chromeRight then
-        frame.chromeRight = frame:CreateTexture(nil, "ARTWORK")
-        frame.chromeRight:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, 0)
-        frame.chromeRight:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
-        frame.chromeRight:SetWidth(16)
-    end
-end
-
 local function ToggleDebugAddonMode()
     AugSonarDB.debugMode = not AugSonarDB.debugMode
     if AugSonarDB.debugMode then
         AugSonarDB.disabledAddons = {}
-        if C_AddOns and C_AddOns.GetAddOns then
-            local addons = C_AddOns.GetAddOns()
-            if addons then
-                for _, addon in ipairs(addons) do
-                    if addon ~= ADDON_NAME and C_AddOns.IsAddOnLoaded(addon) then
-                        table.insert(AugSonarDB.disabledAddons, addon)
-                        if C_AddOns.DisableAddOn then
-                            C_AddOns.DisableAddOn(addon)
-                        end
-                    end
-                end
+        local numAddOns = (C_AddOns and C_AddOns.GetNumAddOns) and C_AddOns.GetNumAddOns() or 0
+        for i = 1, numAddOns do
+            local name = C_AddOns.GetAddOnInfo(i)
+            if name and name ~= ADDON_NAME and C_AddOns.IsAddOnLoaded(name) then
+                table.insert(AugSonarDB.disabledAddons, name)
+                C_AddOns.DisableAddOn(name)
             end
         end
+        print("|cFF33FF99AugSonar|r Debug mode ON - disabled " .. #AugSonarDB.disabledAddons .. " other addon(s).")
     else
         if type(AugSonarDB.disabledAddons) == "table" and C_AddOns and C_AddOns.EnableAddOn then
-            for _, addon in ipairs(AugSonarDB.disabledAddons) do
-                C_AddOns.EnableAddOn(addon)
+            for _, name in ipairs(AugSonarDB.disabledAddons) do
+                C_AddOns.EnableAddOn(name)
             end
         end
+        print("|cFF33FF99AugSonar|r Debug mode OFF - restored disabled addon(s).")
         AugSonarDB.disabledAddons = nil
     end
 end
@@ -173,6 +137,8 @@ local function PlaySonarSound()
         PlaySound(8596)
     end
 end
+
+local testPreviewActive = false
 
 local uiContainer = CreateFrame("Frame", "AugSonarUIContainer", UIParent)
 uiContainer:SetSize(250, 100)
@@ -203,7 +169,7 @@ local prescBorder = prescBar:CreateTexture(nil, "BORDER"); prescBorder:SetAllPoi
 local prescText = prescBar:CreateFontString(nil, "OVERLAY", "GameFontHighlight"); prescText:SetPoint("CENTER"); prescText:SetText("Prescience")
 uiContainer.prescBar, uiContainer.prescBg, uiContainer.prescBorder, uiContainer.prescText = prescBar, prescBg, prescBorder, prescText
 
-local prescienceWindow = CreateFrame("Frame", "AugSonarPrescienceWindow", UIParent)
+local prescienceWindow = CreateFrame("Frame", "AugSonarPrescienceWindow", UIParent, "BackdropTemplate")
 prescienceWindow:SetSize(300, 200)
 prescienceWindow:SetPoint("CENTER", 400, 0)
 prescienceWindow:SetMovable(true)
@@ -219,7 +185,7 @@ pwTitle:SetText("Prescience Targets")
 prescienceWindow.maxRows = 8
 prescienceWindow.members = {}
 
-local settingsFrame = CreateFrame("Frame", "AugSonarSettingsFrame", UIParent)
+local settingsFrame = CreateFrame("Frame", "AugSonarSettingsFrame", UIParent, "BackdropTemplate")
 settingsFrame:SetSize(380, 520)
 settingsFrame:SetPoint("CENTER")
 settingsFrame:SetMovable(true)
@@ -229,9 +195,6 @@ settingsFrame:SetScript("OnDragStart", settingsFrame.StartMoving)
 settingsFrame:SetScript("OnDragStop", settingsFrame.StopMovingOrSizing)
 settingsFrame:Hide()
 SetFrameBackdrop(settingsFrame)
-settingsFrame.bg = settingsFrame:CreateTexture(nil, "BACKGROUND")
-settingsFrame.bg:SetAllPoints()
-EnsureFrameChrome(settingsFrame)
 settingsFrame.title = settingsFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
 settingsFrame.title:SetPoint("TOP", settingsFrame, "TOP", 0, -12)
 settingsFrame.title:SetText("AugSonar Settings")
@@ -258,16 +221,10 @@ local function ApplyTheme()
         uiContainer.prescBorder:SetColorTexture(unpack(palette.border))
     end
     if prescienceWindow then
-        SetChromeColor(prescienceWindow, palette.border)
+        SetBackdropColors(prescienceWindow, palette.panel, palette.border)
     end
     if settingsFrame then
-        SetChromeColor(settingsFrame, palette.border)
-        if settingsFrame.bg then settingsFrame.bg:SetColorTexture(unpack(palette.panel)) end
-        if settingsFrame.border then settingsFrame.border:SetColorTexture(unpack(palette.border)) end
-        if settingsFrame.chromeTop then settingsFrame.chromeTop:SetColorTexture(unpack(palette.border)) end
-        if settingsFrame.chromeBottom then settingsFrame.chromeBottom:SetColorTexture(unpack(palette.border)) end
-        if settingsFrame.chromeLeft then settingsFrame.chromeLeft:SetColorTexture(unpack(palette.border)) end
-        if settingsFrame.chromeRight then settingsFrame.chromeRight:SetColorTexture(unpack(palette.border)) end
+        SetBackdropColors(settingsFrame, palette.panel, palette.border)
         if settingsFrame.title then settingsFrame.title:SetTextColor(unpack(palette.accent)) end
         if versionText then versionText:SetTextColor(unpack(palette.accent)) end
         SkinButton(testButton, palette)
@@ -381,24 +338,24 @@ testButton:SetScript("OnClick", function()
     local palette = CurrentPalette()
     ApplyTheme()
     testPreviewActive = not testPreviewActive
-    emBar:Show()
-    prescBar:Show()
-    emBar:SetMinMaxValues(0, 10)
-    emBar:SetValue(3)
-    prescBar:SetMinMaxValues(0, 15)
-    prescBar:SetValue(4)
-    emText:SetText("Ebon Might: 3.0s")
-    prescText:SetText("Prescience: 4.0s")
-    emBar:SetStatusBarColor(unpack(palette.emColor))
-    prescBar:SetStatusBarColor(unpack(palette.prescColor))
     if testPreviewActive then
+        emBar:Show()
+        prescBar:Show()
+        emBar:SetMinMaxValues(0, 10)
+        emBar:SetValue(3)
+        prescBar:SetMinMaxValues(0, 15)
+        prescBar:SetValue(4)
+        emText:SetText("Ebon Might: 3.0s")
+        prescText:SetText("Prescience: 4.0s")
+        emBar:SetStatusBarColor(unpack(palette.emColor))
+        prescBar:SetStatusBarColor(unpack(palette.prescColor))
         testButton:SetText("Hide Test UI")
+        PlaySonarSound()
     else
         emBar:Hide()
         prescBar:Hide()
         testButton:SetText("Test Alert & UI")
     end
-    PlaySonarSound()
 end)
 
 local closeButton = CreateFrame("Button", nil, settingsFrame, "UIPanelButtonTemplate")
@@ -448,7 +405,6 @@ local lastEMAlert = 0
 local lastPrescAlert = 0
 local emAlertToken = nil
 local prescAlertToken = nil
-local testPreviewActive = false
 
 local function GetBuffFromNameplate(spellID)
     local frames = { WorldFrame:GetChildren() }
@@ -555,6 +511,7 @@ local function UpdateGroupPrescienceWindow()
 end
 
 local function UpdateBuffBars()
+    if testPreviewActive then return end
     local currentTime = GetTime()
     local emAura = GetPlayerBuff(EM_SPELL_ID)
     if emAura then
