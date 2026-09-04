@@ -14,7 +14,7 @@ AugSonarDB = AugSonarDB or {
     theme = "default",
     showPrescience = true,
     soundEnabled = true,
-    uiScale = 1.0,
+    showGroupPrescience = true,
     locked = false,
 }
 
@@ -31,22 +31,22 @@ local THEMES = {
         name = "Dark",
         emColor = { 1, 0.7, 0.1 },
         prescColor = { 0.2, 0.8, 1 },
-        bgColor = { 0.05, 0.05, 0.05, 0.8 },
-        borderColor = { 0.5, 0.5, 0.5, 0.5 },
+        bgColor = { 0.05, 0.05, 0.05, 0.9 },
+        borderColor = { 0.5, 0.5, 0.5, 0.7 },
     },
     light = {
         name = "Light",
         emColor = { 1, 0.8, 0.2 },
         prescColor = { 0.2, 0.7, 1 },
-        bgColor = { 0.9, 0.9, 0.9, 0.3 },
-        borderColor = { 0.2, 0.2, 0.2, 0.5 },
+        bgColor = { 0.9, 0.9, 0.9, 0.5 },
+        borderColor = { 0.2, 0.2, 0.2, 0.7 },
     },
     purple = {
         name = "Purple Mage",
         emColor = { 0.9, 0.4, 1 },
         prescColor = { 0.6, 0.2, 0.9 },
-        bgColor = { 0.1, 0.05, 0.15, 0.7 },
-        borderColor = { 0.8, 0.4, 1, 0.6 },
+        bgColor = { 0.1, 0.05, 0.15, 0.8 },
+        borderColor = { 0.8, 0.4, 1, 0.8 },
     },
 }
 
@@ -58,9 +58,30 @@ frame:RegisterEvent("ADDON_LOADED")
 frame:RegisterEvent("PLAYER_ENTERING_WORLD")
 frame:RegisterEvent("PLAYER_REGEN_DISABLED")
 frame:RegisterEvent("PLAYER_REGEN_ENABLED")
+frame:RegisterEvent("UNIT_AURA")
+frame:RegisterEvent("GROUP_ROSTER_UPDATE")
 
 -- ==========================================
--- [2] UI Container with Theme Support
+-- [2] Sound Function
+-- ==========================================
+local function PlaySonarSound()
+    if not AugSonarDB.soundEnabled then return end
+    
+    -- Try multiple sound methods for compatibility
+    local soundPath = "Interface\\AddOns\\AugSonar\\sonar.ogg"
+    
+    if PlaySoundFile then
+        PlaySoundFile(soundPath, "Master")
+    end
+    
+    -- Fallback: Try built-in game sounds
+    if not PlaySoundFile then
+        PlaySound(8596) -- Raid warning sound as fallback
+    end
+end
+
+-- ==========================================
+-- [3] UI Container with Theme Support
 -- ==========================================
 local uiContainer = CreateFrame("Frame", "AugSonarUIContainer", UIParent)
 uiContainer:SetSize(250, 100)
@@ -76,22 +97,6 @@ end)
 uiContainer:SetScript("OnDragStop", function(self)
     self:StopMovingOrSizing()
 end)
-
-local function ApplyTheme(container)
-    local theme = THEMES[AugSonarDB.theme] or THEMES.default
-    if container.emBar then
-        container.emBar:SetStatusBarColor(unpack(theme.emColor))
-    end
-    if container.prescBar then
-        container.prescBar:SetStatusBarColor(unpack(theme.prescColor))
-    end
-    if container.bg then
-        container.bg:SetColorTexture(unpack(theme.bgColor))
-    end
-    if container.border then
-        container.border:SetColorTexture(unpack(theme.borderColor))
-    end
-end
 
 -- Ebon Might Bar
 local emBar = CreateFrame("StatusBar", nil, uiContainer)
@@ -112,8 +117,9 @@ emText:SetPoint("CENTER")
 emText:SetText("Ebon Might")
 
 uiContainer.emBar = emBar
-uiContainer.bg = emBg
-uiContainer.border = emBorder
+uiContainer.emBg = emBg
+uiContainer.emBorder = emBorder
+uiContainer.emText = emText
 
 -- Prescience Bar
 local prescBar = CreateFrame("StatusBar", nil, uiContainer)
@@ -134,9 +140,203 @@ prescText:SetPoint("CENTER")
 prescText:SetText("Prescience")
 
 uiContainer.prescBar = prescBar
+uiContainer.prescBg = prescBg
+uiContainer.prescBorder = prescBorder
+uiContainer.prescText = prescText
+
+-- Apply theme to UI
+local function ApplyTheme(immediately)
+    local theme = THEMES[AugSonarDB.theme] or THEMES.default
+    
+    -- Player buffs
+    if uiContainer.emBar then
+        uiContainer.emBar:SetStatusBarColor(unpack(theme.emColor))
+        uiContainer.emBg:SetColorTexture(unpack(theme.bgColor))
+        uiContainer.emBorder:SetColorTexture(unpack(theme.borderColor))
+    end
+    
+    if uiContainer.prescBar then
+        uiContainer.prescBar:SetStatusBarColor(unpack(theme.prescColor))
+        uiContainer.prescBg:SetColorTexture(unpack(theme.bgColor))
+        uiContainer.prescBorder:SetColorTexture(unpack(theme.borderColor))
+    end
+    
+    -- Group Prescience window
+    if prescienceWindow then
+        if prescienceWindow.bg then
+            prescienceWindow.bg:SetColorTexture(unpack(theme.bgColor))
+        end
+        if prescienceWindow.border then
+            prescienceWindow.border:SetColorTexture(unpack(theme.borderColor))
+        end
+        -- Update all group member rows
+        for i = 1, prescienceWindow.maxRows or 5 do
+            local row = prescienceWindow["row" .. i]
+            if row and row.bar then
+                row.bar:SetStatusBarColor(unpack(theme.prescColor))
+                if row.bg then
+                    row.bg:SetColorTexture(unpack(theme.bgColor))
+                end
+            end
+        end
+    end
+end
 
 -- ==========================================
--- [3] Buff Tracking with Combat Fallback
+-- [4] Group Prescience Tracking Window
+-- ==========================================
+local prescienceWindow = CreateFrame("Frame", "AugSonarPrescienceWindow", UIParent)
+prescienceWindow:SetSize(300, 200)
+prescienceWindow:SetPoint("CENTER", 400, 0)
+prescienceWindow:SetMovable(true)
+prescienceWindow:EnableMouse(true)
+prescienceWindow:RegisterForDrag("LeftButton")
+prescienceWindow:SetScript("OnDragStart", function(self)
+    if not AugSonarDB.locked then
+        self:StartMoving()
+    end
+end)
+prescienceWindow:SetScript("OnDragStop", function(self)
+    self:StopMovingOrSizing()
+end)
+prescienceWindow:Hide()
+
+-- Window background
+local pwBg = prescienceWindow:CreateTexture(nil, "BACKGROUND")
+pwBg:SetAllPoints()
+pwBg:SetColorTexture(0, 0, 0, 0.6)
+prescienceWindow.bg = pwBg
+
+-- Window border
+local pwBorder = prescienceWindow:CreateTexture(nil, "BORDER")
+pwBorder:SetAllPoints()
+pwBorder:SetTexture("Interface\\Common\\Common-Input-Border")
+pwBorder:SetColorTexture(1, 1, 1, 0.3)
+prescienceWindow.border = pwBorder
+
+-- Title
+local pwTitle = prescienceWindow:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+pwTitle:SetPoint("TOPLEFT", prescienceWindow, "TOPLEFT", 8, -8)
+pwTitle:SetText("Prescience Targets")
+
+prescienceWindow.maxRows = 8
+local groupPrescienceData = {}
+
+local function UpdateGroupPrescienceWindow()
+    if not AugSonarDB.showGroupPrescience or not AugSonarDB.showPrescience then
+        prescienceWindow:Hide()
+        return
+    end
+    
+    local inInstance = IsInInstance()
+    if not inInstance then
+        prescienceWindow:Hide()
+        return
+    end
+    
+    groupPrescienceData = {}
+    local numGroupMembers = GetNumGroupMembers()
+    
+    if numGroupMembers == 0 then
+        prescienceWindow:Hide()
+        return
+    end
+    
+    local currentTime = GetTime()
+    local isRaid = IsInRaid()
+    
+    for i = 1, numGroupMembers do
+        local unit = isRaid and ("raid" .. i) or ("party" .. i)
+        if UnitExists(unit) then
+            local auras = C_UnitAuras.GetAuraSlots(unit, 1)
+            if auras then
+                for _, auraInfo in ipairs(auras) do
+                    if auraInfo.spellId == PRESC_SPELL_ID then
+                        local remaining = math.max(0, auraInfo.expirationTime - currentTime)
+                        table.insert(groupPrescienceData, {
+                            name = UnitName(unit),
+                            remaining = remaining,
+                            expirationTime = auraInfo.expirationTime,
+                        })
+                        break
+                    end
+                end
+            end
+        end
+    end
+    
+    -- Sort by remaining time
+    table.sort(groupPrescienceData, function(a, b)
+        return a.remaining > b.remaining
+    end)
+    
+    if #groupPrescienceData == 0 then
+        prescienceWindow:Hide()
+        return
+    end
+    
+    prescienceWindow:Show()
+    
+    -- Update rows
+    local yOffset = -30
+    for i = 1, #groupPrescienceData do
+        if i > prescienceWindow.maxRows then break end
+        
+        local data = groupPrescienceData[i]
+        local rowName = "row" .. i
+        local row = prescienceWindow[rowName]
+        
+        if not row then
+            row = CreateFrame("Frame", nil, prescienceWindow)
+            row:SetSize(280, 20)
+            row:SetPoint("TOPLEFT", prescienceWindow, "TOPLEFT", 8, yOffset)
+            
+            local bg = row:CreateTexture(nil, "BACKGROUND")
+            bg:SetAllPoints()
+            row.bg = bg
+            
+            local bar = CreateFrame("StatusBar", nil, row)
+            bar:SetSize(140, 18)
+            bar:SetPoint("RIGHT", row, "RIGHT", -8, 0)
+            bar:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
+            bar:SetMinMaxValues(0, 15)
+            row.bar = bar
+            
+            local barBg = bar:CreateTexture(nil, "BACKGROUND")
+            barBg:SetAllPoints()
+            barBg:SetColorTexture(0.1, 0.1, 0.1, 0.8)
+            
+            local nameText = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            nameText:SetPoint("LEFT", row, "LEFT", 0, 0)
+            nameText:SetWidth(130)
+            row.nameText = nameText
+            
+            prescienceWindow[rowName] = row
+        end
+        
+        row:Show()
+        row.nameText:SetText(data.name)
+        row.bar:SetValue(data.remaining)
+        
+        local theme = THEMES[AugSonarDB.theme] or THEMES.default
+        row.bar:SetStatusBarColor(unpack(theme.prescColor))
+        row.bg:SetColorTexture(unpack(theme.bgColor))
+        
+        yOffset = yOffset - 22
+    end
+    
+    -- Hide unused rows
+    for i = #groupPrescienceData + 1, prescienceWindow.maxRows do
+        local row = prescienceWindow["row" .. i]
+        if row then row:Hide() end
+    end
+    
+    local windowHeight = math.max(100, 40 + (#groupPrescienceData * 22))
+    prescienceWindow:SetHeight(windowHeight)
+end
+
+-- ==========================================
+-- [5] Buff Tracking with Combat Fallback
 -- ==========================================
 local lastEMAlert = 0
 local lastPrescAlert = 0
@@ -177,7 +377,7 @@ local function GetPlayerBuff(spellID)
 end
 
 -- ==========================================
--- [4] Update Logic
+-- [6] Update Logic
 -- ==========================================
 local isTesting = false
 
@@ -188,6 +388,7 @@ local function UpdateBuffBars()
     if not inInstance then
         emBar:Hide()
         prescBar:Hide()
+        prescienceWindow:Hide()
         return
     end
     
@@ -205,9 +406,7 @@ local function UpdateBuffBars()
         emText:SetText(string.format("Ebon Might: %.1fs", remaining))
         
         if remaining > 0 and remaining <= AugSonarDB.alertThreshold and (GetTime() - lastEMAlert) > 0.5 then
-            if AugSonarDB.soundEnabled then
-                PlaySoundFile("Interface\\AddOns\\AugSonar\\sonar.ogg", "Master")
-            end
+            PlaySonarSound()
             lastEMAlert = GetTime()
         end
     else
@@ -227,9 +426,7 @@ local function UpdateBuffBars()
             prescText:SetText(string.format("Prescience: %.1fs", remaining))
             
             if remaining > 0 and remaining <= AugSonarDB.alertThreshold and (GetTime() - lastPrescAlert) > 0.5 then
-                if AugSonarDB.soundEnabled then
-                    PlaySoundFile("Interface\\AddOns\\AugSonar\\sonar.ogg", "Master")
-                end
+                PlaySonarSound()
                 lastPrescAlert = GetTime()
             end
         else
@@ -238,13 +435,16 @@ local function UpdateBuffBars()
     else
         prescBar:Hide()
     end
+    
+    -- Update group Prescience window
+    UpdateGroupPrescienceWindow()
 end
 
 -- ==========================================
--- [5] Settings UI
+-- [7] Settings UI
 -- ==========================================
 local settingsFrame = CreateFrame("Frame", "AugSonarSettingsFrame", UIParent, "BasicFrameTemplateWithInset")
-settingsFrame:SetSize(380, 450)
+settingsFrame:SetSize(380, 520)
 settingsFrame:SetPoint("CENTER")
 settingsFrame:SetMovable(true)
 settingsFrame:EnableMouse(true)
@@ -303,8 +503,8 @@ UIDropDownMenu_Initialize(themeDropdown, function(self, level)
         info.arg1 = themeKey
         info.func = function(self, arg1)
             AugSonarDB.theme = arg1
-            ApplyTheme(uiContainer)
             UIDropDownMenu_SetSelectedValue(themeDropdown, arg1)
+            ApplyTheme(true)
         end
         UIDropDownMenu_AddButton(info, level)
     end
@@ -321,10 +521,24 @@ prescCheckbox:SetPoint("TOPLEFT", settingsFrame, "TOPLEFT", 20, yOffset)
 prescCheckbox:SetChecked(AugSonarDB.showPrescience)
 prescCheckbox.text = prescCheckbox:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 prescCheckbox.text:SetPoint("LEFT", prescCheckbox, "RIGHT", 5, 0)
-prescCheckbox.text:SetText("Track Prescience")
+prescCheckbox.text:SetText("Track Your Prescience")
 prescCheckbox:SetScript("OnClick", function(self)
     AugSonarDB.showPrescience = self:GetChecked()
     if not AugSonarDB.showPrescience then prescBar:Hide() end
+end)
+
+yOffset = yOffset - 30
+
+-- Group Prescience Toggle
+local groupPrescCheckbox = CreateFrame("CheckButton", nil, settingsFrame, "UICheckButtonTemplate")
+groupPrescCheckbox:SetPoint("TOPLEFT", settingsFrame, "TOPLEFT", 20, yOffset)
+groupPrescCheckbox:SetChecked(AugSonarDB.showGroupPrescience)
+groupPrescCheckbox.text = groupPrescCheckbox:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+groupPrescCheckbox.text:SetPoint("LEFT", groupPrescCheckbox, "RIGHT", 5, 0)
+groupPrescCheckbox.text:SetText("Show Group Prescience Window")
+groupPrescCheckbox:SetScript("OnClick", function(self)
+    AugSonarDB.showGroupPrescience = self:GetChecked()
+    if not AugSonarDB.showGroupPrescience then prescienceWindow:Hide() end
 end)
 
 yOffset = yOffset - 30
@@ -376,9 +590,7 @@ testButton:SetScript("OnClick", function()
             prescText:SetText("Prescience: 9.2s (TEST)")
         end
         
-        if AugSonarDB.soundEnabled then
-            PlaySoundFile("Interface\\AddOns\\AugSonar\\sonar.ogg", "Master")
-        end
+        PlaySonarSound()
     else
         testButton:SetText("Test Alert & UI")
         emBar:Hide()
@@ -398,7 +610,7 @@ closeButton:SetScript("OnClick", function()
 end)
 
 -- ==========================================
--- [6] Minimap Button
+-- [8] Minimap Button
 -- ==========================================
 local minimapBtn = CreateFrame("Button", "AugSonarMinimapBtn", Minimap)
 minimapBtn:SetSize(32, 32)
@@ -452,7 +664,7 @@ end)
 
 minimapBtn:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-    GameTooltip:AddLine("AugSonar")
+    GameTooltip:AddLine("AugSonar 2.0")
     GameTooltip:AddLine("Click for settings")
     GameTooltip:Show()
 end)
@@ -462,7 +674,7 @@ minimapBtn:SetScript("OnLeave", function()
 end)
 
 -- ==========================================
--- [7] Event Handling
+-- [9] Event Handling
 -- ==========================================
 local ticker
 
@@ -471,8 +683,8 @@ frame:SetScript("OnEvent", function(self, event, arg1)
         threshSlider:SetValue(AugSonarDB.alertThreshold)
         threshText:SetText(string.format("%.1f", AugSonarDB.alertThreshold))
         UpdateMinimapPos()
-        ApplyTheme(uiContainer)
-        print("|cFF33FF99AugSonar 2.0:|r Loaded. Click minimap icon for settings. In-combat mode active.")
+        ApplyTheme(true)
+        print("|cFF33FF99AugSonar 2.0:|r Loaded. Click minimap icon for settings.")
         
     elseif event == "PLAYER_ENTERING_WORLD" then
         if not ticker then
@@ -480,11 +692,15 @@ frame:SetScript("OnEvent", function(self, event, arg1)
         end
         emBar:Hide()
         prescBar:Hide()
+        prescienceWindow:Hide()
         
     elseif event == "PLAYER_REGEN_DISABLED" then
         InCombat = true
         
     elseif event == "PLAYER_REGEN_ENABLED" then
         InCombat = false
+        
+    elseif event == "UNIT_AURA" or event == "GROUP_ROSTER_UPDATE" then
+        UpdateGroupPrescienceWindow()
     end
 end)
