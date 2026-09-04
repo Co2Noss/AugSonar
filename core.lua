@@ -1,5 +1,5 @@
 -- AugSonar Core - Augmentation Evoker Buff Tracker with Combat Support
-local VERSION = "0.07"
+local VERSION = "0.08"
 local EM_SPELL_ID = 395296
 local PRESC_SPELL_ID = 409311
 
@@ -56,6 +56,15 @@ local function SetFrameBackdrop(frame)
         frame.border = frame:CreateTexture(nil, "BORDER")
         frame.border:SetAllPoints()
         frame.border:SetTexture("Interface\\Buttons\\WHITE8X8")
+    end
+end
+
+local function ApplyBorder(frame, color)
+    if not frame then return end
+    if frame.SetBackdropBorderColor then
+        frame:SetBackdropBorderColor(unpack(color))
+    elseif frame.border then
+        frame.border:SetColorTexture(unpack(color))
     end
 end
 
@@ -159,23 +168,16 @@ local function ApplyTheme()
     if prescienceWindow then
         if prescienceWindow.SetBackdropColor then
             prescienceWindow:SetBackdropColor(unpack(palette.panel))
-            prescienceWindow:SetBackdropBorderColor(unpack(palette.border))
-        elseif prescienceWindow.bg and prescienceWindow.border then
-            prescienceWindow.bg:SetColorTexture(unpack(palette.panel))
-            prescienceWindow.border:SetColorTexture(unpack(palette.border))
         end
         if prescienceWindow.bg then prescienceWindow.bg:SetColorTexture(unpack(palette.panel)) end
-        if prescienceWindow.border then prescienceWindow.border:SetColorTexture(unpack(palette.border)) end
+        ApplyBorder(prescienceWindow, palette.border)
     end
     if settingsFrame then
         if settingsFrame.SetBackdropColor then
             settingsFrame:SetBackdropColor(unpack(palette.bg))
-            settingsFrame:SetBackdropBorderColor(unpack(palette.border))
-        elseif settingsFrame.bg and settingsFrame.border then
-            settingsFrame.bg:SetColorTexture(unpack(palette.bg))
-            settingsFrame.border:SetColorTexture(unpack(palette.border))
         end
         if settingsFrame.bg then settingsFrame.bg:SetColorTexture(unpack(palette.bg)) end
+        ApplyBorder(settingsFrame, palette.border)
         if settingsFrame.title then settingsFrame.title:SetTextColor(unpack(palette.accent)) end
         if versionText then versionText:SetTextColor(unpack(palette.accent)) end
     end
@@ -282,6 +284,14 @@ testButton:SetPoint("TOPLEFT", settingsFrame, "TOPLEFT", 20, yOffset)
 testButton:SetText("Test Alert & UI")
 testButton:SetScript("OnClick", function()
     ApplyTheme()
+    emBar:Show()
+    prescBar:Show()
+    emBar:SetMinMaxValues(0, 10)
+    emBar:SetValue(3)
+    prescBar:SetMinMaxValues(0, 15)
+    prescBar:SetValue(4)
+    emText:SetText("Ebon Might: 3.0s")
+    prescText:SetText("Prescience: 4.0s")
     PlaySonarSound()
 end)
 
@@ -374,7 +384,8 @@ local function UpdateGroupPrescienceWindow()
         prescienceWindow:Hide()
         return
     end
-    if not IsInGroup() then
+    local inInstance = IsInGroup() or IsInRaid() or (GetNumGroupMembers() or 0) > 0 or (IsInInstance and select(2, IsInInstance()))
+    if not inInstance then
         prescienceWindow:Hide()
         return
     end
@@ -382,10 +393,19 @@ local function UpdateGroupPrescienceWindow()
     local currentTime = GetTime()
     local isRaid = IsInRaid()
     local groupSize = GetNumGroupMembers()
+    if groupSize == 0 then
+        groupSize = 1
+    end
     for i = 1, groupSize do
-        local unit = isRaid and ("raid" .. i) or ("party" .. i)
+        local unit = isRaid and ("raid" .. i) or (i == 1 and "player" or ("party" .. (i - 1)))
         if UnitExists(unit) then
-            local aura = C_UnitAuras and C_UnitAuras.GetAuraDataBySpellName and C_UnitAuras.GetAuraDataBySpellName(unit, GetSpellInfo(PRESC_SPELL_ID))
+            local aura = nil
+            if AuraUtil and AuraUtil.FindAuraBySpellID then
+                aura = AuraUtil.FindAuraBySpellID(PRESC_SPELL_ID, unit, "HELPFUL")
+            end
+            if not aura and C_UnitAuras and C_UnitAuras.GetAuraDataBySpellID then
+                aura = C_UnitAuras.GetAuraDataBySpellID(unit, PRESC_SPELL_ID)
+            end
             if aura and aura.expirationTime then
                 table.insert(groupPrescienceData, { name = UnitName(unit), remaining = math.max(0, aura.expirationTime - currentTime), expirationTime = aura.expirationTime })
             end
