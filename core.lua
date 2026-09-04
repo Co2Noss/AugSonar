@@ -1,5 +1,5 @@
 -- AugSonar Core - Augmentation Evoker Buff Tracker with Combat Support
-local VERSION = "0.05"
+local VERSION = "0.06"
 local EM_SPELL_ID = 395296
 local PRESC_SPELL_ID = 409311
 
@@ -303,17 +303,20 @@ minimapBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
 local lastEMAlert = 0
 local lastPrescAlert = 0
+local emAlertToken = nil
+local prescAlertToken = nil
 
 local function GetBuffFromNameplate(spellID)
     local frames = { WorldFrame:GetChildren() }
     for _, child in ipairs(frames) do
-        local name = child:GetName()
+        local name = child.GetName and child:GetName()
         if name and name:find("NamePlate") then
-            local buffFrame = child.UnitFrame and child.UnitFrame.BuffFrame
+            local unitFrame = child.UnitFrame or child.UnitFrame and child.UnitFrame
+            local buffFrame = unitFrame and unitFrame.BuffFrame
             if buffFrame and buffFrame.auraFrames then
                 for _, aura in pairs(buffFrame.auraFrames) do
                     local auraInstanceID = aura.auraInstanceID
-                    if auraInstanceID and C_UnitAuras.GetAuraDataByAuraInstanceID then
+                    if auraInstanceID and C_UnitAuras and C_UnitAuras.GetAuraDataByAuraInstanceID then
                         local auraData = C_UnitAuras.GetAuraDataByAuraInstanceID("player", auraInstanceID)
                         if auraData and auraData.spellId == spellID then
                             return auraData
@@ -328,6 +331,10 @@ end
 local function GetPlayerBuff(spellID)
     if C_UnitAuras and C_UnitAuras.GetPlayerAuraBySpellID then
         local aura = C_UnitAuras.GetPlayerAuraBySpellID(spellID)
+        if aura then return aura end
+    end
+    if AuraUtil and AuraUtil.FindAuraBySpellID then
+        local aura = AuraUtil.FindAuraBySpellID(spellID, "player", "HELPFUL")
         if aura then return aura end
     end
     if InCombat then
@@ -402,15 +409,22 @@ local function UpdateBuffBars()
         emBar:Show()
         local remaining = math.max(0, emAura.expirationTime - currentTime)
         local duration = emAura.duration and emAura.duration > 0 and emAura.duration or 10
+        local token = tostring(emAura.auraInstanceID or emAura.spellId or EM_SPELL_ID) .. ":" .. math.floor(emAura.expirationTime or 0)
         emBar:SetMinMaxValues(0, duration)
         emBar:SetValue(remaining)
         emText:SetText(string.format("Ebon Might: %.1fs", remaining))
-        if remaining > 0 and remaining <= AugSonarDB.alertThreshold and (GetTime() - lastEMAlert) > 0.5 then
+        if token ~= emAlertToken then
+            emAlertToken = token
+            lastEMAlert = 0
+        end
+        if remaining > 0 and remaining <= AugSonarDB.alertThreshold and lastEMAlert ~= token then
             PlaySonarSound()
-            lastEMAlert = GetTime()
+            lastEMAlert = token
         end
     else
         emBar:Hide()
+        emAlertToken = nil
+        lastEMAlert = 0
     end
     if AugSonarDB.showPrescience then
         local prescAura = GetPlayerBuff(PRESC_SPELL_ID)
@@ -418,18 +432,27 @@ local function UpdateBuffBars()
             prescBar:Show()
             local remaining = math.max(0, prescAura.expirationTime - currentTime)
             local duration = prescAura.duration and prescAura.duration > 0 and prescAura.duration or 15
+            local token = tostring(prescAura.auraInstanceID or prescAura.spellId or PRESC_SPELL_ID) .. ":" .. math.floor(prescAura.expirationTime or 0)
             prescBar:SetMinMaxValues(0, duration)
             prescBar:SetValue(remaining)
             prescText:SetText(string.format("Prescience: %.1fs", remaining))
-            if remaining > 0 and remaining <= AugSonarDB.alertThreshold and (GetTime() - lastPrescAlert) > 0.5 then
+            if token ~= prescAlertToken then
+                prescAlertToken = token
+                lastPrescAlert = 0
+            end
+            if remaining > 0 and remaining <= AugSonarDB.alertThreshold and lastPrescAlert ~= token then
                 PlaySonarSound()
-                lastPrescAlert = GetTime()
+                lastPrescAlert = token
             end
         else
             prescBar:Hide()
+            prescAlertToken = nil
+            lastPrescAlert = 0
         end
     else
         prescBar:Hide()
+        prescAlertToken = nil
+        lastPrescAlert = 0
     end
     UpdateGroupPrescienceWindow()
 end
@@ -448,10 +471,13 @@ frame:SetScript("OnEvent", function(self, event, arg1)
         emBar:Hide()
         prescBar:Hide()
         prescienceWindow:Hide()
+        UpdateBuffBars()
     elseif event == "PLAYER_REGEN_DISABLED" then
         InCombat = true
+        UpdateBuffBars()
     elseif event == "PLAYER_REGEN_ENABLED" then
         InCombat = false
+        UpdateBuffBars()
     elseif event == "UNIT_AURA" or event == "GROUP_ROSTER_UPDATE" then
         UpdateBuffBars()
     end
