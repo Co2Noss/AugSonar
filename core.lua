@@ -1,5 +1,5 @@
 -- AugSonar Core - Augmentation Evoker Buff Tracker with Combat Support
-local VERSION = "0.12"
+local VERSION = "0.13"
 local EM_SPELL_ID = 395296
 local PRESC_SPELL_ID = 409311
 
@@ -104,6 +104,34 @@ local function SetChromeColor(frame, color)
     ApplyBorder(frame, color)
 end
 
+local function EnsureFrameChrome(frame)
+    if not frame then return end
+    if not frame.chromeTop then
+        frame.chromeTop = frame:CreateTexture(nil, "ARTWORK")
+        frame.chromeTop:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
+        frame.chromeTop:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, 0)
+        frame.chromeTop:SetHeight(16)
+    end
+    if not frame.chromeBottom then
+        frame.chromeBottom = frame:CreateTexture(nil, "ARTWORK")
+        frame.chromeBottom:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, 0)
+        frame.chromeBottom:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
+        frame.chromeBottom:SetHeight(16)
+    end
+    if not frame.chromeLeft then
+        frame.chromeLeft = frame:CreateTexture(nil, "ARTWORK")
+        frame.chromeLeft:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
+        frame.chromeLeft:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, 0)
+        frame.chromeLeft:SetWidth(16)
+    end
+    if not frame.chromeRight then
+        frame.chromeRight = frame:CreateTexture(nil, "ARTWORK")
+        frame.chromeRight:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, 0)
+        frame.chromeRight:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
+        frame.chromeRight:SetWidth(16)
+    end
+end
+
 local function ToggleDebugAddonMode()
     AugSonarDB.debugMode = not AugSonarDB.debugMode
     if AugSonarDB.debugMode then
@@ -203,6 +231,7 @@ settingsFrame:Hide()
 SetFrameBackdrop(settingsFrame)
 settingsFrame.bg = settingsFrame:CreateTexture(nil, "BACKGROUND")
 settingsFrame.bg:SetAllPoints()
+EnsureFrameChrome(settingsFrame)
 settingsFrame.title = settingsFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
 settingsFrame.title:SetPoint("TOP", settingsFrame, "TOP", 0, -12)
 settingsFrame.title:SetText("AugSonar Settings")
@@ -235,6 +264,10 @@ local function ApplyTheme()
         SetChromeColor(settingsFrame, palette.border)
         if settingsFrame.bg then settingsFrame.bg:SetColorTexture(unpack(palette.panel)) end
         if settingsFrame.border then settingsFrame.border:SetColorTexture(unpack(palette.border)) end
+        if settingsFrame.chromeTop then settingsFrame.chromeTop:SetColorTexture(unpack(palette.border)) end
+        if settingsFrame.chromeBottom then settingsFrame.chromeBottom:SetColorTexture(unpack(palette.border)) end
+        if settingsFrame.chromeLeft then settingsFrame.chromeLeft:SetColorTexture(unpack(palette.border)) end
+        if settingsFrame.chromeRight then settingsFrame.chromeRight:SetColorTexture(unpack(palette.border)) end
         if settingsFrame.title then settingsFrame.title:SetTextColor(unpack(palette.accent)) end
         if versionText then versionText:SetTextColor(unpack(palette.accent)) end
         SkinButton(testButton, palette)
@@ -347,6 +380,7 @@ testButton:SetText("Test Alert & UI")
 testButton:SetScript("OnClick", function()
     local palette = CurrentPalette()
     ApplyTheme()
+    testPreviewActive = not testPreviewActive
     emBar:Show()
     prescBar:Show()
     emBar:SetMinMaxValues(0, 10)
@@ -357,10 +391,13 @@ testButton:SetScript("OnClick", function()
     prescText:SetText("Prescience: 4.0s")
     emBar:SetStatusBarColor(unpack(palette.emColor))
     prescBar:SetStatusBarColor(unpack(palette.prescColor))
-    C_Timer.After(2, function()
+    if testPreviewActive then
+        testButton:SetText("Hide Test UI")
+    else
         emBar:Hide()
         prescBar:Hide()
-    end)
+        testButton:SetText("Test Alert & UI")
+    end
     PlaySonarSound()
 end)
 
@@ -411,6 +448,7 @@ local lastEMAlert = 0
 local lastPrescAlert = 0
 local emAlertToken = nil
 local prescAlertToken = nil
+local testPreviewActive = false
 
 local function GetBuffFromNameplate(spellID)
     local frames = { WorldFrame:GetChildren() }
