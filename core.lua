@@ -1,5 +1,5 @@
 -- AugSonar Core - Augmentation Evoker Buff Tracker with Combat Support
-local VERSION = "2.02"
+local VERSION = "2.03"
 local EM_SPELL_ID = 395296    -- Ebon Might
 local PRESC_SPELL_ID = 409311 -- Prescience
 
@@ -17,6 +17,7 @@ AugSonarDB = AugSonarDB or {
     soundEnabled = true,
     showGroupPrescience = true,
     locked = false,
+    debugMode = false,
 }
 
 -- Theme definitions
@@ -65,8 +66,21 @@ frame:RegisterEvent("GROUP_ROSTER_UPDATE")
 -- ==========================================
 -- [2] Sound Function
 -- ==========================================
+-- [2] Sound & Debug Functions
+-- ==========================================
+local function DebugPrint(message)
+    if AugSonarDB.debugMode then
+        print("|cFF33FF99AugSonar [DEBUG]:|r " .. message)
+    end
+end
+
 local function PlaySonarSound()
-    if not AugSonarDB.soundEnabled then return end
+    if not AugSonarDB.soundEnabled then 
+        DebugPrint("Sound is disabled, skipping alert")
+        return 
+    end
+    
+    DebugPrint("Playing sonar sound...")
     
     -- Try with forward slashes (WoW standard)
     local soundPath1 = "Interface/AddOns/AugSonar/sonar.ogg"
@@ -183,6 +197,9 @@ local function ApplyTheme(immediately)
             end
         end
     end
+    
+    -- Settings window theme
+    ApplySettingsWindowTheme()
 end
 
 -- ==========================================
@@ -461,11 +478,22 @@ settingsFrame.title:SetFontObject("GameFontHighlight")
 settingsFrame.title:SetPoint("CENTER", settingsFrame.TitleBg, "CENTER", 0, 0)
 settingsFrame.title:SetText("AugSonar Settings")
 
--- Version Display
+-- Version Display (at bottom to avoid X overlap)
 local versionText = settingsFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-versionText:SetPoint("TOPRIGHT", settingsFrame, "TOPRIGHT", -15, -10)
+versionText:SetPoint("BOTTOMRIGHT", settingsFrame, "BOTTOMRIGHT", -10, 8)
 versionText:SetTextColor(1, 0.84, 0)
 versionText:SetText("v" .. VERSION)
+
+-- Apply theme to settings window
+local function ApplySettingsWindowTheme()
+    local theme = THEMES[AugSonarDB.theme] or THEMES.default
+    if settingsFrame.TitleBg then
+        settingsFrame.TitleBg:SetColorTexture(unpack(theme.bgColor))
+    end
+    if settingsFrame.InsetBorderTop then
+        settingsFrame.InsetBorderTop:SetColorTexture(unpack(theme.borderColor))
+    end
+end
 
 local yOffset = -40
 
@@ -514,7 +542,7 @@ local function InitializeThemeDropdown(self, level)
         info.checked = (AugSonarDB.theme == themeKey)
         info.func = function(self, arg1)
             AugSonarDB.theme = arg1
-            print("|cFF33FF99AugSonar:|r Theme changed to " .. themeData.name)
+            DebugPrint("Theme changed to " .. themeData.name)
             ApplyTheme(true)
             UIDropDownMenu_SetSelectedValue(themeDropdown, arg1)
             CloseDropDownMenus()
@@ -578,6 +606,22 @@ lockCheckbox.text:SetPoint("LEFT", lockCheckbox, "RIGHT", 5, 0)
 lockCheckbox.text:SetText("Lock UI Position")
 lockCheckbox:SetScript("OnClick", function(self)
     AugSonarDB.locked = self:GetChecked()
+end)
+
+yOffset = yOffset - 30
+
+-- Debug Mode Toggle
+local debugCheckbox = CreateFrame("CheckButton", nil, settingsFrame, "UICheckButtonTemplate")
+debugCheckbox:SetPoint("TOPLEFT", settingsFrame, "TOPLEFT", 20, yOffset)
+debugCheckbox:SetChecked(AugSonarDB.debugMode)
+debugCheckbox.text = debugCheckbox:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+debugCheckbox.text:SetPoint("LEFT", debugCheckbox, "RIGHT", 5, 0)
+debugCheckbox.text:SetText("Debug Mode (Chat Output)")
+debugCheckbox:SetScript("OnClick", function(self)
+    AugSonarDB.debugMode = self:GetChecked()
+    if AugSonarDB.debugMode then
+        print("|cFF33FF99AugSonar:|r Debug mode enabled")
+    end
 end)
 
 yOffset = yOffset - 40
