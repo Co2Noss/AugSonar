@@ -1,5 +1,5 @@
 -- AugSonar Core - Augmentation Evoker Buff Tracker with Combat Support
-local VERSION = "0.08"
+local VERSION = "0.09"
 local EM_SPELL_ID = 395296
 local PRESC_SPELL_ID = 409311
 
@@ -65,6 +65,17 @@ local function ApplyBorder(frame, color)
         frame:SetBackdropBorderColor(unpack(color))
     elseif frame.border then
         frame.border:SetColorTexture(unpack(color))
+    end
+end
+
+local function SetBackdropColors(frame, bgColor, borderColor)
+    if not frame then return end
+    if frame.SetBackdropColor then
+        frame:SetBackdropColor(unpack(bgColor))
+        ApplyBorder(frame, borderColor)
+    else
+        if frame.bg then frame.bg:SetColorTexture(unpack(bgColor)) end
+        ApplyBorder(frame, borderColor)
     end
 end
 
@@ -166,18 +177,10 @@ local function ApplyTheme()
         uiContainer.prescBorder:SetColorTexture(unpack(palette.border))
     end
     if prescienceWindow then
-        if prescienceWindow.SetBackdropColor then
-            prescienceWindow:SetBackdropColor(unpack(palette.panel))
-        end
-        if prescienceWindow.bg then prescienceWindow.bg:SetColorTexture(unpack(palette.panel)) end
-        ApplyBorder(prescienceWindow, palette.border)
+        SetBackdropColors(prescienceWindow, palette.panel, palette.border)
     end
     if settingsFrame then
-        if settingsFrame.SetBackdropColor then
-            settingsFrame:SetBackdropColor(unpack(palette.bg))
-        end
-        if settingsFrame.bg then settingsFrame.bg:SetColorTexture(unpack(palette.bg)) end
-        ApplyBorder(settingsFrame, palette.border)
+        SetBackdropColors(settingsFrame, palette.bg, palette.border)
         if settingsFrame.title then settingsFrame.title:SetTextColor(unpack(palette.accent)) end
         if versionText then versionText:SetTextColor(unpack(palette.accent)) end
     end
@@ -283,7 +286,9 @@ testButton:SetSize(140, 28)
 testButton:SetPoint("TOPLEFT", settingsFrame, "TOPLEFT", 20, yOffset)
 testButton:SetText("Test Alert & UI")
 testButton:SetScript("OnClick", function()
+    local palette = CurrentPalette()
     ApplyTheme()
+    settingsFrame:Show()
     emBar:Show()
     prescBar:Show()
     emBar:SetMinMaxValues(0, 10)
@@ -292,6 +297,8 @@ testButton:SetScript("OnClick", function()
     prescBar:SetValue(4)
     emText:SetText("Ebon Might: 3.0s")
     prescText:SetText("Prescience: 4.0s")
+    emBar:SetStatusBarColor(unpack(palette.emColor))
+    prescBar:SetStatusBarColor(unpack(palette.prescColor))
     PlaySonarSound()
 end)
 
@@ -384,7 +391,7 @@ local function UpdateGroupPrescienceWindow()
         prescienceWindow:Hide()
         return
     end
-    local inInstance = IsInGroup() or IsInRaid() or (GetNumGroupMembers() or 0) > 0 or (IsInInstance and select(2, IsInInstance()))
+    local inInstance = IsInGroup() or IsInRaid() or (select(2, IsInInstance()) == true)
     if not inInstance then
         prescienceWindow:Hide()
         return
@@ -393,9 +400,7 @@ local function UpdateGroupPrescienceWindow()
     local currentTime = GetTime()
     local isRaid = IsInRaid()
     local groupSize = GetNumGroupMembers()
-    if groupSize == 0 then
-        groupSize = 1
-    end
+    if groupSize == 0 then groupSize = 1 end
     for i = 1, groupSize do
         local unit = isRaid and ("raid" .. i) or (i == 1 and "player" or ("party" .. (i - 1)))
         if UnitExists(unit) then
